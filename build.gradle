@@ -1,0 +1,20 @@
+plugins {
+    id 'application'
+    id 'com.github.johnrengelman.shadow' version '4.0.4'
+}
+mainClassName = 'com.thftgr.Main'
+group 'org.example'
+version '1.0-SNAPSHOT'
+
+repositories {
+    jcenter()
+}
+
+dependencies {
+    testCompile group: 'junit', name: 'junit', version: '4.12'
+    compile files("${System.properties['java.home']}/../lib/tools.jar")
+    compile group: 'com.googlecode.json-simple', name: 'json-simple', version: '1.1.1'
+    implementation 'com.google.code.gson:gson:2.8.6'
+    implementation("com.squareup.okhttp3:okhttp:4.8.1")
+}
+compileJava.options.encoding = 'UTF-8'
