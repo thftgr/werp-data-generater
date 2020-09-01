@@ -1,7 +1,6 @@
 package com.thftgr;
 
 import com.google.gson.JsonObject;
-import com.google.gson.JsonParser;
 import okhttp3.*;
 
 import java.io.IOException;
@@ -11,20 +10,32 @@ import java.time.format.DateTimeFormatter;
 import java.util.Random;
 
 public class Main {
-    public static void main(String[] args)  {
+    public static void main(String[] args) {
         int dataCount = 0;
-        while (true){
-            try{
-                if(new Main().generator("7e2757b7-badc-4303-8cd0-2eefa9d78e3b")){
-                    dataCount +=1;
-                    System.out.println("generated data : "+dataCount+"GB\n");
-                }else{
-                    System.out.println("generate fail. | data : "+dataCount+"GB\n");
+//        if(args.length !=36){
+//            System.out.println("check the referrer_id");
+//            return;
+//        }
+        System.out.println(args[0]);
+
+
+
+        while (true) {
+            try {
+
+                if (new Main().generator(args[0])) {
+                    dataCount += 1;
+                    System.out.println("generated data : " + dataCount + "GB\n");
+                } else {
+                    System.out.println("generate fail. | data : " + dataCount + "GB\n");
 
                 }
-                Thread.sleep(10000);
-            }catch ( Exception ignored){
 
+                Thread.sleep(20000);
+
+
+            } catch (Exception e) {
+                System.out.println(e.getMessage());
             }
         }
     }
@@ -72,6 +83,7 @@ public class Main {
         data.addProperty("tos", new Main().iosdate());
         data.addProperty("type", "Android");
         data.addProperty("locale", "ko-KR");
+        RequestBody requestBody = RequestBody.create(MediaType.parse("application/json"), data.toString());
 
         Request request = new Request.Builder()
                 .url("https://api.cloudflareclient.com/v0a" + new Main().rand(3, true) + "/reg")
@@ -80,15 +92,13 @@ public class Main {
                 .addHeader("'Connection'", " 'Keep-Alive',")
                 .addHeader("'Accept-Encoding'", " 'gzip',")
                 .addHeader("'User-Agent'", " 'okhttp/3.12.1'")
-                .post(RequestBody.create(MediaType.parse("application/json"), data.toString()))
+                .post(requestBody)
                 .build();
 
         Response response = client.newCall(request).execute();
-        JsonObject resp = (JsonObject) JsonParser.parseString(response.body().string());
-
         client.connectionPool().evictAll();
         System.out.println(response.code());
-        return !resp.get("referrer").isJsonNull();
+        return response.body().string().contains(referrer_id);
     }
 
 
