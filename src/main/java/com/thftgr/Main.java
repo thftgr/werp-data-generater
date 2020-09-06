@@ -13,6 +13,8 @@ import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Date;
+import java.util.HashSet;
+import java.util.Iterator;
 import java.util.Random;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -21,69 +23,105 @@ public class Main {
     static Random rnd = new Random();
 
 
-    public static void main(String[] args){
-        if (args[0].length() != 36) {
-            System.out.println("data length not match");
-            try {
-                Thread.sleep(10000);
-            } catch (InterruptedException e) {
-                e.printStackTrace();
+    public static void main(String[] args) {
+        String[] account;
+        if(args.length == 0){
+            account = new String[1];
+            account[0] = "7e2757b7-badc-4303-8cd0-2eefa9d78e3b";
+        }else {
+            account = args;
+        }
+
+
+        //account[0] = "7e2757b7-badc-4303-8cd0-2eefa9d78e3b";
+//        account[1] = "a316e89f-f533-49d1-af44-d18c70144555";
+        //account[1] = "cf62e033-9e89-49c6-9830-5e61adc29ac5";
+
+
+        long startTime = System.currentTimeMillis();
+        int queueData = 0;
+
+        AtomicInteger threadCount = new AtomicInteger();
+        AtomicInteger dataCount = new AtomicInteger();
+        HashSet<Proxy> proxyHashSet = new HashSet<>();
+
+
+        try {
+            File file = new File("setting/list.txt");
+            BufferedReader bufReader = new BufferedReader(new FileReader(file));
+            String line;
+            while ((line = bufReader.readLine()) != null) {
+                String ip = line.substring(0, line.indexOf(":"));
+                int port = Integer.parseInt(line.substring(line.indexOf(":") + 1));
+                proxyHashSet.add(new Proxy(Proxy.Type.HTTP, new InetSocketAddress(ip, port)));
             }
+            file.exists();
+        } catch (Exception ignored) {
             return;
         }
-        long startTime = System.currentTimeMillis();
-        Proxy proxy;
-        AtomicInteger dataCount = new AtomicInteger();
 
-        File file = new File("setting/list.txt");
-        while (true) {
-//            System.gc();
-
-            if (dataCount.get() != 0)
-                System.out.println(((System.currentTimeMillis() - startTime) / dataCount.get()) + "ms/GB | Total data:" + dataCount + "GB\n");
-            try {
-
-                BufferedReader bufReader = new BufferedReader(new FileReader(file));
-                String line;
-                while ((line = bufReader.readLine()) != null) {
-                    proxy = new Proxy(Proxy.Type.HTTP, new InetSocketAddress(line.substring(0, line.indexOf(":")), Integer.parseInt(line.substring(line.indexOf(":") + 1))));
-                    Proxy finalProxy = proxy;
-                    new Thread(() -> {
-
-                        try {
-                            Thread.sleep(rnd.nextInt(2000));
-//                            if (generator("7e2757b7-badc-4303-8cd0-2eefa9d78e3b", finalProxy)) {
-                            if (generator(args[0], finalProxy)) {
-                                dataCount.addAndGet(1);
-                            }
-                        } catch (Exception ignored) {
-                        }
-                    }).start();
+        new Thread(() -> {
+            while(true){
+                try {
+                    Thread.sleep(5000);
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
                 }
-            } catch (Exception e) {
-                System.out.println(e.getMessage());
+                System.out.println("Alive Thread : "+threadCount.get());
             }
-            System.out.println(new Date().toString() + "============================================queue / 1min");
-//            Thread.sleep(100);
-            try {
-                Thread.sleep(60000);
-            } catch (Exception e) {
-                e.printStackTrace();
+        }).start();
+
+        while (true) {
+            if (dataCount.get() != 0) {
+                System.out.println(((System.currentTimeMillis() - startTime) / dataCount.get()) + "ms/GB | data: " + (dataCount.get() - queueData) + "GB | Total data:" + dataCount + "GB\n");
             }
+            queueData = dataCount.get();
+            System.out.println(new Date().toString() + "============================================loading...");
+            Iterator proxyIterator = proxyHashSet.iterator();
+
+            long runtime = System.currentTimeMillis();
+            while (proxyIterator.hasNext()) {
+                Proxy finalProxy = (Proxy) proxyIterator.next();
+                new Thread(() -> {
+                    threadCount.addAndGet(1);
+                    try {
+//                        Thread.sleep(rnd.nextInt(5000) + 1);
+                        if (new Main().generator(account[rnd.nextInt(account.length)], finalProxy)) {
+                            dataCount.addAndGet(1);
+                        }
+                    } catch (Exception ignored) {
+                    }
+                    threadCount.addAndGet(-1);
+                }).start();
+                try {
+                    Thread.sleep(2);
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+            }
+            System.out.println(new Date().toString() + "============================================queued");
+            while (threadCount.get() > 0 | (System.currentTimeMillis() - runtime) < 60000){
+                try {
+                    Thread.sleep(1000);
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+            }
+
 
         }
 
     }
 
 
-    static boolean generator(String referrer_id, Proxy proxy) throws IOException {
+    boolean generator(String referrer_id, Proxy proxy) throws IOException {
         if (proxy == null) return false;
         OkHttpClient client = new OkHttpClient()
                 .newBuilder()
                 .proxy(proxy)
-                .connectTimeout(30, TimeUnit.SECONDS)
-                .writeTimeout(30, TimeUnit.SECONDS)
-                .readTimeout(30, TimeUnit.SECONDS)
+                .connectTimeout(10, TimeUnit.SECONDS)
+                .writeTimeout(10, TimeUnit.SECONDS)
+                .readTimeout(10, TimeUnit.SECONDS)
                 .build();
 
         String installId = rand(11, false);
@@ -105,7 +143,7 @@ public class Main {
                 .addHeader("'Connection'", " 'Keep-Alive',")
                 .addHeader("'Accept-Encoding'", " 'gzip',")
                 .addHeader("'User-Agent'", " 'okhttp/4.8.1'")
-                .post(RequestBody.create(data.toString(),MediaType.parse("application/json")))
+                .post(RequestBody.create(data.toString(), MediaType.parse("application/json")))
                 .build();
 
         Response response = client.newCall(request).execute();
@@ -142,5 +180,6 @@ public class Main {
         String IOSTime = ZonedDateTime.now(ZoneOffset.UTC).format(DateTimeFormatter.ISO_INSTANT);
         return IOSTime.substring(0, IOSTime.length() - 1) + "+09:00";
     }
+
 
 }
