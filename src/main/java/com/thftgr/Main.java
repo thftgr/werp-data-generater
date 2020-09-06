@@ -1,180 +1,146 @@
 package com.thftgr;
 
-import com.google.gson.Gson;
-import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
-import com.google.gson.JsonParser;
 import okhttp3.*;
 
+import java.io.BufferedReader;
+import java.io.File;
 import java.io.FileReader;
-import java.io.FileWriter;
 import java.io.IOException;
-import java.net.*;
+import java.net.InetSocketAddress;
+import java.net.Proxy;
 import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.Date;
 import java.util.Random;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class Main {
+    static Random rnd = new Random();
 
-    static JsonArray proxyList = new JsonArray();
-    static long startTime = System.currentTimeMillis();
 
-    public static void main(String[] args) {
+    public static void main(String[] args){
         if (args[0].length() != 36) {
             System.out.println("data length not match");
+            try {
+                Thread.sleep(10000);
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
             return;
         }
+        long startTime = System.currentTimeMillis();
+        Proxy proxy;
+        AtomicInteger dataCount = new AtomicInteger();
 
+        File file = new File("setting/list.txt");
+        while (true) {
+//            System.gc();
 
+            if (dataCount.get() != 0)
+                System.out.println(((System.currentTimeMillis() - startTime) / dataCount.get()) + "ms/GB | Total data:" + dataCount + "GB\n");
             try {
-                proxyList = (JsonArray) JsonParser.parseReader(new Gson().newJsonReader(new FileReader("setting/proxy_list.json")));
+
+                BufferedReader bufReader = new BufferedReader(new FileReader(file));
+                String line;
+                while ((line = bufReader.readLine()) != null) {
+                    proxy = new Proxy(Proxy.Type.HTTP, new InetSocketAddress(line.substring(0, line.indexOf(":")), Integer.parseInt(line.substring(line.indexOf(":") + 1))));
+                    Proxy finalProxy = proxy;
+                    new Thread(() -> {
+
+                        try {
+                            Thread.sleep(rnd.nextInt(2000));
+//                            if (generator("7e2757b7-badc-4303-8cd0-2eefa9d78e3b", finalProxy)) {
+                            if (generator(args[0], finalProxy)) {
+                                dataCount.addAndGet(1);
+                            }
+                        } catch (Exception ignored) {
+                        }
+                    }).start();
+                }
             } catch (Exception e) {
                 System.out.println(e.getMessage());
             }
-
-
-        int dataCount = 0;
-        long timetmp = 0;
-        long delay = 0;
-        while (true) {
-            delay = System.currentTimeMillis();
-            if (proxyList.size() == 0) {
-                System.out.println("proxy list end");
-                return;
+            System.out.println(new Date().toString() + "============================================queue / 1min");
+//            Thread.sleep(100);
+            try {
+                Thread.sleep(60000);
+            } catch (Exception e) {
+                e.printStackTrace();
             }
-            for (int i = 0; i < proxyList.size(); i++) {
 
-
-                timetmp = System.currentTimeMillis();
-                System.out.println("=====================================");
-
-                Proxy proxy = new Main().buildProxy(proxyList.get(i).getAsString());
-                System.out.println(proxy.toString());
-
-
-                try {
-//                    if (new Main().generator("cf62e033-9e89-49c6-9830-5e61adc29ac5",proxy)) {
-//                    if (new Main().generator("7e2757b7-badc-4303-8cd0-2eefa9d78e3b", proxy)) {
-                    if (new Main().generator(args[0], proxy)) {
-                        dataCount += 1;
-                        System.out.println("generated data : " + dataCount + "GB");
-                        System.out.println((System.currentTimeMillis() - timetmp) + "ms\n");
-                        System.out.println(((System.currentTimeMillis() - startTime) / dataCount / 1000) + "s/GB\n");
-                    } else {
-                        System.out.println("generate fail. | data : " + dataCount + "GB");
-                    }
-                } catch (Exception e) {
-                    System.out.println(e.getMessage());
-                    System.out.println();
-                    System.out.println("Exception generate fail. | data : " + dataCount + "GB");
-                    proxyList.remove(i); //램에서만 삭제
-                    if(args.length == 2){
-                        if (args[1].equals("-d")) {
-                            new Main().settingSave();
-                        }
-                    }
-
-
-                }
-
-            }
-            // 전체 실행 후 시간이 20초 이하면 남운시간만큼 대기
-            if (System.currentTimeMillis() - delay < 20000) {
-                try {
-                    Thread.sleep((System.currentTimeMillis() - delay));
-                } catch (InterruptedException e) {
-                    e.printStackTrace();
-                }
-            }
         }
+
     }
 
-    String rand(int length, boolean intOnly) {
-        StringBuffer temp = new StringBuffer();
-        Random rnd = new Random();
+
+    static boolean generator(String referrer_id, Proxy proxy) throws IOException {
+        if (proxy == null) return false;
+        OkHttpClient client = new OkHttpClient()
+                .newBuilder()
+                .proxy(proxy)
+                .connectTimeout(30, TimeUnit.SECONDS)
+                .writeTimeout(30, TimeUnit.SECONDS)
+                .readTimeout(30, TimeUnit.SECONDS)
+                .build();
+
+        String installId = rand(11, false);
+
+        JsonObject data = new JsonObject();
+        data.addProperty("key", (rand(43, false) + "="));
+        data.addProperty("install_id", installId);
+        data.addProperty("fcm_token", installId + ":APA91b" + rand(134, false));
+        data.addProperty("referrer", referrer_id);
+        data.addProperty("warp_enabled", false);
+        data.addProperty("tos", IOSDate());
+        data.addProperty("type", "Android");
+        data.addProperty("locale", "ko-KR");
+
+        Request request = new Request.Builder()
+                .url("https://api.cloudflareclient.com/v0a" + rand(3, true) + "/reg")
+                .addHeader("'Content-Type'", " 'application/json; charset=UTF-8',")
+                .addHeader("'Host'", " 'api.cloudflareclient.com',")
+                .addHeader("'Connection'", " 'Keep-Alive',")
+                .addHeader("'Accept-Encoding'", " 'gzip',")
+                .addHeader("'User-Agent'", " 'okhttp/4.8.1'")
+                .post(RequestBody.create(data.toString(),MediaType.parse("application/json")))
+                .build();
+
+        Response response = client.newCall(request).execute();
+        assert response.body() != null;
+        response.body().close();
+        response.close();
+        client.connectionPool().evictAll();
+        client.dispatcher().cancelAll();
+        client.dispatcher().executorService().shutdown();
+        return response.code() == 200;
+    }
+
+    static String rand(int length, boolean intOnly) {
+        StringBuilder temp = new StringBuilder();
         for (int i = 0; i < length; i++) {
             int rIndex = rnd.nextInt(3);
             if (intOnly) rIndex = 2;
             switch (rIndex) {
                 case 0:
-                    // a-z
-                    temp.append((char) (rnd.nextInt(26) + 97));
+                    temp.append((char) (rnd.nextInt(26) + 97));// a-z
                     break;
                 case 1:
-                    // A-Z
-                    temp.append((char) (rnd.nextInt(26) + 65));
+                    temp.append((char) (rnd.nextInt(26) + 65));// A-Z
                     break;
                 case 2:
-                    // 0-9
-                    temp.append((rnd.nextInt(10)));
+                    temp.append(rnd.nextInt(10));// 0-9
                     break;
             }
         }
         return temp.toString();
-
     }
 
-    String iosdate() {
-        String iostime = ZonedDateTime.now(ZoneOffset.UTC).format(DateTimeFormatter.ISO_INSTANT);
-        return iostime.substring(0, iostime.length() - 1) + "+09:00";
+    static String IOSDate() {
+        String IOSTime = ZonedDateTime.now(ZoneOffset.UTC).format(DateTimeFormatter.ISO_INSTANT);
+        return IOSTime.substring(0, IOSTime.length() - 1) + "+09:00";
     }
-
-    boolean generator(String referrer_id, Proxy proxy) throws IOException {
-        OkHttpClient client = new OkHttpClient()
-                .newBuilder()
-                .proxy(proxy)
-                .build();
-
-
-        String installId = new Main().rand(11, false);
-
-        JsonObject data = new JsonObject();
-        data.addProperty("key", (new Main().rand(43, false) + "="));
-        data.addProperty("install_id", installId);
-        data.addProperty("fcm_token", installId + ":APA91b" + new Main().rand(134, false));
-        data.addProperty("referrer", referrer_id);
-        data.addProperty("warp_enabled", false);
-        data.addProperty("tos", new Main().iosdate());
-        data.addProperty("type", "Android");
-        data.addProperty("locale", "ko-KR");
-
-        Request request = new Request.Builder()
-                .url("https://api.cloudflareclient.com/v0a" + new Main().rand(3, true) + "/reg")
-                .addHeader("'Content-Type'", " 'application/json; charset=UTF-8',")
-                .addHeader("'Host'", " 'api.cloudflareclient.com',")
-                .addHeader("'Connection'", " 'Keep-Alive',")
-                .addHeader("'Accept-Encoding'", " 'gzip',")
-                .addHeader("'User-Agent'", " 'okhttp/3.12.1'")
-                .post(RequestBody.create(MediaType.parse("application/json"), data.toString()))
-
-                .build();
-
-        Response response = client.newCall(request).execute();
-        JsonObject resp = (JsonObject) JsonParser.parseString(response.body().string());
-
-        client.connectionPool().evictAll();
-        System.out.println("status code : " + response.code());
-        return !resp.get("referrer").isJsonNull();
-    }
-
-
-    Proxy buildProxy(String ip_port) {
-        String ip = ip_port.substring(0, ip_port.indexOf(":"));
-        int port = Integer.parseInt(ip_port.substring(ip_port.indexOf(":") + 1));
-        return new Proxy(Proxy.Type.HTTP, new InetSocketAddress(ip, port));
-    }
-
-    void settingSave() {
-
-        try {
-            FileWriter fw = new FileWriter("setting/proxy_list.json", false);
-            fw.write(Main.proxyList.toString());
-            fw.close();
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-    }
-
 
 }

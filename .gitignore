@@ -1,3 +1,5 @@
 
 .gradle\*.*
 *.lock
+setting/proxy_list.json
+*.lock
