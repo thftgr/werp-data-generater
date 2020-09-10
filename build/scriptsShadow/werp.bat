@@ -63,7 +63,7 @@ set CMD_LINE_ARGS=%*
 :execute
 @rem Setup the command line
 
-set CLASSPATH=%APP_HOME%\lib\werp-1.0-SNAPSHOT.jar
+set CLASSPATH=%APP_HOME%\lib\werp-1.0-SNAPSHOT-all.jar
 
 @rem Execute werp
 "%JAVA_EXE%" %DEFAULT_JVM_OPTS% %JAVA_OPTS% %WERP_OPTS%  -jar "%CLASSPATH%" %CMD_LINE_ARGS%

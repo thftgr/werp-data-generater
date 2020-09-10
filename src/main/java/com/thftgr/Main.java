@@ -13,13 +13,15 @@ import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.Random;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class Main {
     static Random rnd = new Random();
-
+//    static int threadCount = 0;
+    static AtomicInteger threadCount = new AtomicInteger();
 
     public static void main(String[] args) throws IOException, InterruptedException {
         String[] account;
@@ -32,9 +34,7 @@ public class Main {
         }
 
         long startTime = System.currentTimeMillis();
-        int queueData = 0;
 
-        AtomicInteger threadCount = new AtomicInteger();
         AtomicInteger dataCount = new AtomicInteger();
         HashSet<Proxy> proxyHashSet = new HashSet<>();
 
@@ -57,8 +57,8 @@ public class Main {
                 try {
                     Thread.sleep(5000);
                     if (dataCount.get() != 0) {
-                        System.out.println("Alive Thread : " + threadCount.get());
-                        System.out.println(((System.currentTimeMillis() - startTime) / dataCount.get()) + "ms/GB | data: " + (dataCount.get() - queueData) + "GB | Total data:" + dataCount + "GB\n");
+                        System.out.println("Alive Thread : " + threadCount);
+                        System.out.println(((System.currentTimeMillis() - startTime) / dataCount.get()) + "ms/GB | Total data:" + dataCount + "GB");
                     }
                 } catch (InterruptedException e) {
                     e.printStackTrace();
@@ -66,69 +66,38 @@ public class Main {
             }
         }).start();
 
-        for (int i = 0; i < proxyHashSet.size(); i++) {
-            threads[i] = new Thread(() -> {
-//                System.out.println("thread ---");
-                threadCount.addAndGet(1);
-                try {
-//                        Thread.sleep(rnd.nextInt(5000) + 1);
-                    if (new Main().generator(account[rnd.nextInt(account.length)], proxyHashSet.iterator().next())) {
-                        dataCount.addAndGet(1);
+
+
+        while (true){
+            Iterator proxyHashSetIterator = proxyHashSet.iterator();
+            for (int i = 0; i < proxyHashSet.size(); i++) {
+                threads[i] = new Thread(() -> {
+                    threadCount.addAndGet(1);
+                    try {
+//                        Thread.sleep(rnd.nextInt(5000));
+                        if (new Main().generator(account[rnd.nextInt(account.length)], (Proxy) proxyHashSetIterator.next())) {
+                            dataCount.addAndGet(1);
+                        }
+                    } catch (Exception ignored) {
                     }
-                } catch (Exception ignored) {
+                    threadCount.addAndGet(-1);
+                });
+            }
+
+            long runtime = System.currentTimeMillis();
+
+            for (Thread thread : threads) {
+                thread.start();
+                Thread.sleep(2);
+            }
+            while (threadCount.get() > 0 | (System.currentTimeMillis() - runtime) < 60000) {
+                try {
+                    Thread.sleep(1000);
+                } catch (Exception e) {
+                    e.printStackTrace();
                 }
-                threadCount.addAndGet(-1);
-            });
+            }
         }
-        System.out.println("created thread  " + (System.currentTimeMillis() - startTime) + "ms");
-
-        for (Thread thread : threads) {
-            thread.start();
-            Thread.sleep(2);
-
-        }
-
-
-//        while (true) {
-//            if (dataCount.get() != 0) {
-//                System.out.println(((System.currentTimeMillis() - startTime) / dataCount.get()) + "ms/GB | data: " + (dataCount.get() - queueData) + "GB | Total data:" + dataCount + "GB\n");
-//            }
-//            queueData = dataCount.get();
-//            System.out.println(new Date().toString() + "============================================loading...");
-//            Iterator proxyIterator = proxyHashSet.iterator();
-//
-//            long runtime = System.currentTimeMillis();
-//            while (proxyIterator.hasNext()) {
-//                Proxy finalProxy = (Proxy) proxyIterator.next();
-//                new Thread(() -> {
-//                    threadCount.addAndGet(1);
-//                    try {
-////                        Thread.sleep(rnd.nextInt(5000) + 1);
-//                        if (new Main().generator(account[rnd.nextInt(account.length)], finalProxy)) {
-//                            dataCount.addAndGet(1);
-//                        }
-//                    } catch (Exception ignored) {
-//                    }
-//                    threadCount.addAndGet(-1);
-//                }).start();
-//                try {
-//                    Thread.sleep(2);
-//                } catch (InterruptedException e) {
-//                    e.printStackTrace();
-//                }
-//            }
-//            System.out.println(new Date().toString() + "============================================queued");
-//            while (threadCount.get() > 0 | (System.currentTimeMillis() - runtime) < 60000) {
-//                try {
-//                    Thread.sleep(1000);
-//                } catch (Exception e) {
-//                    e.printStackTrace();
-//                }
-//            }
-//
-//
-//        }
-
     }
 
     static String rand(int length, boolean intOnly) {
@@ -166,6 +135,7 @@ public class Main {
                 .readTimeout(10, TimeUnit.SECONDS)
                 .build();
 
+
         String installId = rand(11, false);
 
         JsonObject data = new JsonObject();
@@ -189,13 +159,18 @@ public class Main {
                 .build();
 
         Response response = client.newCall(request).execute();
+        boolean referrerCheck = false;
+        if(response.body() != null) {
+            String resbody =response.body().string();
+            referrerCheck = resbody.contains(referrer_id) && response.code() == 200;
+        }
         assert response.body() != null;
         response.body().close();
         response.close();
         client.connectionPool().evictAll();
         client.dispatcher().cancelAll();
         client.dispatcher().executorService().shutdown();
-        return response.code() == 200;
+        return referrerCheck;
     }
 
 
