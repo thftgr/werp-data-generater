@@ -1,4 +1,4 @@
 .gradle/
 *.lock
 setting/*
-
+build/*

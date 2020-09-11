@@ -6,96 +6,67 @@ import okhttp3.*;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileReader;
-import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.Proxy;
 import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.HashSet;
-import java.util.Iterator;
 import java.util.Random;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class Main {
     static Random rnd = new Random();
-//    static int threadCount = 0;
     static AtomicInteger threadCount = new AtomicInteger();
 
-    public static void main(String[] args) throws IOException, InterruptedException {
+    public static void main(String[] args) {
         String[] account;
         if (args.length == 0) {
             account = new String[1];
             account[0] = "7e2757b7-badc-4303-8cd0-2eefa9d78e3b";
         } else {
             account = args;
-            if (args.length != 36) account[0] = "7e2757b7-badc-4303-8cd0-2eefa9d78e3b";
+            if (args[0].length() != 36) account[0] = "7e2757b7-badc-4303-8cd0-2eefa9d78e3b";
         }
 
         long startTime = System.currentTimeMillis();
 
         AtomicInteger dataCount = new AtomicInteger();
-        HashSet<Proxy> proxyHashSet = new HashSet<>();
-
-        Thread[] threads;
-
-
-        File file = new File("setting/list.txt");
-        BufferedReader bufReader = new BufferedReader(new FileReader(file));
-        String line;
-        while ((line = bufReader.readLine()) != null) {
-            String ip = line.substring(0, line.indexOf(":"));
-            int port = Integer.parseInt(line.substring(line.indexOf(":") + 1));
-            proxyHashSet.add(new Proxy(Proxy.Type.HTTP, new InetSocketAddress(ip, port)));
-        }
-        file.exists();
-        threads = new Thread[proxyHashSet.size()];
+        HashSet<Proxy> proxyHashSet = new Main().readProxy();
+        HashSet<Thread> threadHashSet = new HashSet<>();
 
         new Thread(() -> {
             while (true) {
-                try {
-                    Thread.sleep(5000);
-                    if (dataCount.get() != 0) {
-                        System.out.println("Alive Thread : " + threadCount);
-                        System.out.println(((System.currentTimeMillis() - startTime) / dataCount.get()) + "ms/GB | Total data:" + dataCount + "GB");
-                    }
-                } catch (InterruptedException e) {
-                    e.printStackTrace();
+                new Main().delay(5000);
+                if (dataCount.get() != 0) {
+                    System.out.println("Alive Thread : " + threadCount);
+                    System.out.println(((System.currentTimeMillis() - startTime) / dataCount.get()) + "ms/GB | Total data:" + dataCount + "GB");
                 }
             }
         }).start();
 
 
-
-        while (true){
-            Iterator proxyHashSetIterator = proxyHashSet.iterator();
-            for (int i = 0; i < proxyHashSet.size(); i++) {
-                threads[i] = new Thread(() -> {
+        while (true) {
+            threadHashSet.clear();
+            for (Proxy proxy : proxyHashSet) {
+                threadHashSet.add(new Thread(() -> {
                     threadCount.addAndGet(1);
-                    try {
-//                        Thread.sleep(rnd.nextInt(5000));
-                        if (new Main().generator(account[rnd.nextInt(account.length)], (Proxy) proxyHashSetIterator.next())) {
-                            dataCount.addAndGet(1);
-                        }
-                    } catch (Exception ignored) {
-                    }
+                    if (new Main().generator(account[rnd.nextInt(account.length)], proxy)) dataCount.addAndGet(1);
                     threadCount.addAndGet(-1);
-                });
+                }));
+
             }
 
             long runtime = System.currentTimeMillis();
 
-            for (Thread thread : threads) {
+            for (Thread thread : threadHashSet) {
                 thread.start();
-                Thread.sleep(2);
+                new Main().delay(1);
             }
+
             while (threadCount.get() > 0 | (System.currentTimeMillis() - runtime) < 60000) {
-                try {
-                    Thread.sleep(1000);
-                } catch (Exception e) {
-                    e.printStackTrace();
-                }
+                new Main().delay(1000);
             }
         }
     }
@@ -120,12 +91,37 @@ public class Main {
         return temp.toString();
     }
 
-    static String IOSDate() {
+    void delay(long i) {
+        try {
+            Thread.sleep(i);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    HashSet<Proxy> readProxy() {
+        HashSet<Proxy> proxyHashSet = new HashSet<>();
+        try {
+            File file = new File("setting/list.txt");
+            BufferedReader bufReader = new BufferedReader(new FileReader(file));
+            String line;
+            while ((line = bufReader.readLine()) != null) {
+                String ip = line.substring(0, line.indexOf(":"));
+                int port = Integer.parseInt(line.substring(line.indexOf(":") + 1));
+                proxyHashSet.add(new Proxy(Proxy.Type.HTTP, new InetSocketAddress(ip, port)));
+            }
+        } catch (Exception e) {
+            return null;
+        }
+        return proxyHashSet;
+    }
+
+    String IOSDate() {
         String IOSTime = ZonedDateTime.now(ZoneOffset.UTC).format(DateTimeFormatter.ISO_INSTANT);
         return IOSTime.substring(0, IOSTime.length() - 1) + "+09:00";
     }
 
-    boolean generator(String referrer_id, Proxy proxy) throws IOException {
+    boolean generator(String referrer_id, Proxy proxy) {
         if (proxy == null) return false;
         OkHttpClient client = new OkHttpClient()
                 .newBuilder()
@@ -158,19 +154,25 @@ public class Main {
                 .post(RequestBody.create(data.toString(), MediaType.parse("application/json")))
                 .build();
 
-        Response response = client.newCall(request).execute();
-        boolean referrerCheck = false;
-        if(response.body() != null) {
-            String resbody =response.body().string();
-            referrerCheck = resbody.contains(referrer_id) && response.code() == 200;
+        Response response = null;
+
+        try {
+            response = client.newCall(request).execute();
+            if (response.body() != null) {
+                String responseBody = response.body().string();
+                response.body().close();
+                return responseBody.contains(referrer_id) && response.code() == 200;
+            }
+
+//            response.close();
+            client.connectionPool().evictAll();
+            client.dispatcher().cancelAll();
+            client.dispatcher().executorService().shutdown();
+        } catch (Exception e) {
+
+            return false;
         }
-        assert response.body() != null;
-        response.body().close();
-        response.close();
-        client.connectionPool().evictAll();
-        client.dispatcher().cancelAll();
-        client.dispatcher().executorService().shutdown();
-        return referrerCheck;
+        return false;
     }
 
 
