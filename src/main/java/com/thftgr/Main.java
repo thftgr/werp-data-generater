@@ -6,19 +6,24 @@ import okhttp3.*;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileReader;
+import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.Proxy;
 import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.HashSet;
+import java.util.Objects;
 import java.util.Random;
+import java.util.Vector;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class Main {
-    static Random rnd = new Random();
+
+    static AtomicInteger dataCount = new AtomicInteger();
     static AtomicInteger threadCount = new AtomicInteger();
+
 
     public static void main(String[] args) {
         String[] account;
@@ -32,15 +37,14 @@ public class Main {
 
         long startTime = System.currentTimeMillis();
 
-        AtomicInteger dataCount = new AtomicInteger();
         HashSet<Proxy> proxyHashSet = new Main().readProxy();
-        HashSet<Thread> threadHashSet = new HashSet<>();
+        Vector<Thread> threadVector = new Vector<>();
 
         new Thread(() -> {
             while (true) {
                 new Main().delay(5000);
-                if (dataCount.get() != 0) {
-                    System.out.println("Alive Thread : " + threadCount);
+                int i = dataCount.get();
+                if (i != 0) {
                     System.out.println(((System.currentTimeMillis() - startTime) / dataCount.get()) + "ms/GB | Total data:" + dataCount + "GB");
                 }
             }
@@ -48,31 +52,29 @@ public class Main {
 
 
         while (true) {
-            threadHashSet.clear();
+            threadVector.clear();
             for (Proxy proxy : proxyHashSet) {
-                threadHashSet.add(new Thread(() -> {
+                threadVector.add(new Thread(() -> {
                     threadCount.addAndGet(1);
-                    if (new Main().generator(account[rnd.nextInt(account.length)], proxy)) dataCount.addAndGet(1);
+                    new Main().generator(account[new Random().nextInt(account.length)], proxy);
                     threadCount.addAndGet(-1);
                 }));
-
             }
-
             long runtime = System.currentTimeMillis();
-
-            for (Thread thread : threadHashSet) {
-                thread.start();
+            int threadCount = threadVector.size();
+            for (int i = 0;i < threadCount ; i++) {
+                threadVector.get(i).start();
                 new Main().delay(1);
             }
-
-            while (threadCount.get() > 0 | (System.currentTimeMillis() - runtime) < 60000) {
+            while (threadCount > 20 && (System.currentTimeMillis() - runtime) < 60000) {
                 new Main().delay(1000);
             }
         }
     }
 
-    static String rand(int length, boolean intOnly) {
+    String rand(int length, boolean intOnly) {
         StringBuilder temp = new StringBuilder();
+        Random rnd = new Random();
         for (int i = 0; i < length; i++) {
             int rIndex = rnd.nextInt(3);
             if (intOnly) rIndex = 2;
@@ -91,9 +93,9 @@ public class Main {
         return temp.toString();
     }
 
-    void delay(long i) {
+    void delay(long m) {
         try {
-            Thread.sleep(i);
+            Thread.sleep(m);
         } catch (Exception e) {
             e.printStackTrace();
         }
@@ -121,19 +123,17 @@ public class Main {
         return IOSTime.substring(0, IOSTime.length() - 1) + "+09:00";
     }
 
-    boolean generator(String referrer_id, Proxy proxy) {
-        if (proxy == null) return false;
+
+    void generator(String referrer_id, Proxy proxy) {
         OkHttpClient client = new OkHttpClient()
                 .newBuilder()
                 .proxy(proxy)
-                .connectTimeout(10, TimeUnit.SECONDS)
-                .writeTimeout(10, TimeUnit.SECONDS)
-                .readTimeout(10, TimeUnit.SECONDS)
+                .connectTimeout(8, TimeUnit.SECONDS)
+                .writeTimeout(8, TimeUnit.SECONDS)
+                .readTimeout(8, TimeUnit.SECONDS)
                 .build();
 
-
         String installId = rand(11, false);
-
         JsonObject data = new JsonObject();
         data.addProperty("key", (rand(43, false) + "="));
         data.addProperty("install_id", installId);
@@ -154,26 +154,17 @@ public class Main {
                 .post(RequestBody.create(data.toString(), MediaType.parse("application/json")))
                 .build();
 
-        Response response = null;
-
+        Response response;
         try {
             response = client.newCall(request).execute();
-            if (response.body() != null) {
-                String responseBody = response.body().string();
-                response.body().close();
-                return responseBody.contains(referrer_id) && response.code() == 200;
-            }
+            Objects.requireNonNull(response.body()).close();
+            response.close();
+            if (response.code() == 200) dataCount.addAndGet(1);
 
-//            response.close();
-            client.connectionPool().evictAll();
-            client.dispatcher().cancelAll();
-            client.dispatcher().executorService().shutdown();
-        } catch (Exception e) {
-
-            return false;
+        } catch (IOException ignored) {
         }
-        return false;
+        client.dispatcher().cancelAll();
+        client.connectionPool().evictAll();
     }
-
 
 }
